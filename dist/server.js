@@ -14527,6 +14527,7 @@ config(en_default());
 // server.ts
 import { exec as execCb } from "child_process";
 import { promisify } from "util";
+import { existsSync } from "fs";
 var execAsync = promisify(execCb);
 async function plugin(bb) {
   bb.log.info("bb-plugin-rtk loaded");
@@ -14534,29 +14535,68 @@ async function plugin(bb) {
     rtkPath: {
       type: "string",
       label: "RTK binary path",
-      default: "/opt/homebrew/bin/rtk",
-      description: "Absolute path to the rtk binary (check with `which rtk`)."
+      default: "",
+      description: "Absolute path to the rtk binary. Empty = auto-detect with `which rtk`."
     }
   });
-  const { rtkPath } = await settings.get();
+  let { rtkPath } = await settings.get();
+  settings.onChange((next) => {
+    rtkPath = next.rtkPath;
+    bb.log.info(`[rtk] rtkPath updated \u2192 ${rtkPath || "(auto-detect)"}`);
+  });
+  async function resolveRtkPath() {
+    if (rtkPath && rtkPath.trim()) {
+      const p = rtkPath.trim();
+      if (existsSync(p)) return { ok: true, path: p };
+      return {
+        ok: false,
+        message: `rtk not installed at "${p}". Set the "RTK binary path" setting (check with \`which rtk\`).`
+      };
+    }
+    try {
+      const { stdout } = await execAsync("which rtk", { timeout: 5e3 });
+      const p = stdout.trim();
+      if (p) return { ok: true, path: p };
+    } catch {
+    }
+    return {
+      ok: false,
+      message: "rtk is not installed. Install the rtk CLI first (see https://github.com/ogallotti/rtk-hermes), then set the RTK binary path in plugin settings if it is not on PATH."
+    };
+  }
+  async function resolveProjectDir(projectId) {
+    try {
+      const project = await bb.sdk.projects.get({ projectId });
+      const source = project?.sources?.find((s) => s.type === "local_path");
+      if (source?.path) return source.path;
+    } catch {
+    }
+    return null;
+  }
   bb.agents.registerTool({
     name: "rtk_shell",
-    description: "Run a shell command through RTK for filtered output (60-90% token savings). Wraps your command: rtk_shell('git diff') rewrites and runs through rtk, returning only the meaningful output. Use for verbose commands: builds, tests, git diffs, cargo/build output, package installs. For commands where you need unfiltered output (reading files, listing directories), use the terminal tool instead.",
+    description: "Run a shell command through RTK for filtered output (token savings on verbose commands). Wraps your command: rtk_shell('git diff') rewrites and runs through rtk, returning only the meaningful output. Use for verbose commands: builds, tests, git diffs, cargo/build output, package installs. Requires the external rtk CLI. This tool does NOT change bb's built-in terminal \u2014 only commands sent through rtk_shell are filtered. It is an unrestricted shell tool: use with the same care as the terminal. For commands where you need unfiltered output (reading files, listing directories), use the terminal tool instead.",
     parameters: external_exports.object({
       command: external_exports.string().min(1).describe(
         "The shell command to run. Do NOT prefix with 'rtk' \u2014 this tool wraps it for you."
       )
     }),
-    async execute({ command }, { threadId }) {
+    async execute({ command }, { threadId, projectId }) {
       try {
-        bb.log.info(`[rtk] thread ${threadId}: ${command}`);
-        const { stdout: rewritten } = await execAsync(`${rtkPath} rewrite ${shellEscape(command)}`, {
+        const resolved = await resolveRtkPath();
+        if (!resolved.ok) return `rtk_shell: ${resolved.message}`;
+        const rtk = resolved.path;
+        const cwd = await resolveProjectDir(projectId) ?? void 0;
+        bb.log.info(`[rtk] thread ${threadId}${cwd ? ` (cwd: ${cwd})` : ""}: ${command}`);
+        const { stdout: rewritten } = await execAsync(`${rtk} rewrite ${shellEscape(command)}`, {
+          cwd,
           timeout: 1e4,
           maxBuffer: 64 * 1024
         });
         const rtkCmd = rewritten.trim();
         bb.log.info(`[rtk] thread ${threadId}: rewrote \u2192 ${rtkCmd}`);
         const { stdout, stderr } = await execAsync(rtkCmd, {
+          cwd,
           timeout: 3e5,
           maxBuffer: 2 * 1024 * 1024
         });
