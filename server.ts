@@ -11,7 +11,7 @@
 //
 // Registers `rtk_shell` as a native agent tool:
 //   rtk_shell "git status" → rewrites → runs through rtk → returns filtered output
-import { type BbPluginApi } from "@get-bb/plugin-sdk";
+import { type RiftPluginApi } from "@riftlabs/plugin-sdk";
 import { z } from "zod";
 import { exec as execCb } from "child_process";
 import { promisify } from "util";
@@ -21,7 +21,7 @@ const execAsync = promisify(execCb);
 
 // ─── Settings ────────────────────────────────────────────────────────
 
-export default async function plugin(bb: BbPluginApi) {
+export default async function plugin(bb: RiftPluginApi) {
   bb.log.info("bb-plugin-rtk loaded");
 
   const settings = bb.settings.define({
