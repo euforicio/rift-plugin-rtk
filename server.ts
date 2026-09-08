@@ -22,7 +22,7 @@ const execAsync = promisify(execCb);
 // ─── Settings ────────────────────────────────────────────────────────
 
 export default async function plugin(bb: RiftPluginApi) {
-  bb.log.info("bb-plugin-rtk loaded");
+  bb.log.info("rift-plugin-rtk loaded");
 
   const settings = bb.settings.define({
     rtkPath: {
@@ -142,7 +142,7 @@ export default async function plugin(bb: RiftPluginApi) {
   // ── Cleanup ──────────────────────────────────────────────────────
 
   bb.onDispose(() => {
-    bb.log.info("bb-plugin-rtk disposed");
+    bb.log.info("rift-plugin-rtk disposed");
   });
 }
 

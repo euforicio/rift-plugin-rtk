@@ -51,3 +51,8 @@ bb plugin config rtk set rtkPath /usr/local/bin/rtk
 ```sh
 bb plugin build
 ```
+
+## Fork provenance
+
+Rift Labs fork: https://github.com/euforicio/rift-plugin-rtk
+Upstream: https://github.com/prismatic7/bb-plugin-rtk
